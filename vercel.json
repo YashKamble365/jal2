@@ -1,0 +1,40 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    },
+    {
+      "src": "api/wris/rainfall.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/wris/groundwater.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/wris/soil.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/wris/rainfall",
+      "dest": "/api/wris/rainfall.js"
+    },
+    {
+      "src": "/api/wris/groundwater",
+      "dest": "/api/wris/groundwater.js"
+    },
+    {
+      "src": "/api/wris/soil",
+      "dest": "/api/wris/soil.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}

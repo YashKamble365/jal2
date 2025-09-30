@@ -1,0 +1,36 @@
+  // ✅ NEW: Enhanced prompt with comprehensive water potential data
+  private buildEnhancedPrompt(env: any, props: any, budget: number, coordinates: any): string {
+    // ✅ FIXED: Use consistent annual need calculation matching environmental service
+    const annualNeed = props.dailyWaterNeed * 365; // Total drinking + cleaning + cooking needs
+    const efficiency = 0.8; // Realistic collection efficiency
+    const actualHarvest = env.waterHarvesting.rooftopHarvest; // Already includes efficiency
+    const rechargeCapacity = env.waterHarvesting.groundwaterRecharge; // From soil calculations
+    const harvestRatio = Math.round((actualHarvest / annualNeed) * 100); // % of need met
+
+    return `Water engineer: Design optimal rainwater harvesting system.
+
+USERS: ${props.occupants} people, ${props.dailyWaterNeed}L daily (${annualNeed.toLocaleString()}L/year total drinking+cleaning+cooking)
+LOCATION: ${coordinates.lat.toFixed(4)}°N, ${coordinates.lng.toFixed(4)}°E
+RAINFALL: ${env.rainfall.annualRainfall.toLocaleString()}mm annual average
+GROUNDWATER: ${env.groundwater.depth}m depth (${env.groundwater.level.toLowerCase()}), recharge capacity: ${rechargeCapacity.toLocaleString()}L/year
+SOIL: ${env.soil.permeabilityClassification} permeability (${env.soil.infiltrationRateMMPerHour}mm/hr infiltration)
+HARVEST POTENTIAL: ${actualHarvest.toLocaleString()}L annual collection at 80% efficiency (${harvestRatio}% of annual need)
+PROPERTY: ${props.propertyType}, ${props.primaryUse} priority, ${props.currentWaterCost}L monthly current water cost
+BUDGET: ₹${budget.toLocaleString()} available, storage priority: ${props.preferredSystem}
+
+Design system that provides realistic water security. Consider:
+
+Key Constraints:
+- Annual need: ${annualNeed.toLocaleString()}L for drinking/cleaning/cooking
+- Real harvest potential: ${actualHarvest.toLocaleString()}L at optimal conditions
+- Water table and soil affect feasibility
+- Municipal costs are ${props.currentWaterCost}L/month
+
+Format:
+NAME: [descriptive system matching actual potential]
+STORAGE_SIZE: [liters - consider actual harvest potential and need coverage]
+COST: [₹ within budget, after subsidy capabilities]
+EFFICIENCY: [realistic % harvest meets total annual need]
+SCORE: [80-98 based on feasibility and harvest potential]
+STRATEGY: [ONE WORD: storage_focused, recharge_focused, or balanced per environmental data]`;
+  }

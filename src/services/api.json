@@ -1,0 +1,446 @@
+{
+    "info": {
+      "name": "WRIS API Collection - All Environmental Data",
+      "description": "Complete collection to test WRIS APIs for Rainfall, Groundwater, and Soil Moisture data for AquaPlan application",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+      "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    },
+    "item": [
+      {
+        "name": "1. WRIS Rainfall API",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/x-www-form-urlencoded",
+              "type": "text"
+            },
+            {
+              "key": "Accept",
+              "value": "application/json",
+              "type": "text"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.32.0",
+              "type": "text"
+            }
+          ],
+          "body": {
+            "mode": "urlencoded",
+            "urlencoded": [
+              {
+                "key": "stateName",
+                "value": "MAHARASHTRA",
+                "type": "text"
+              },
+              {
+                "key": "districtName", 
+                "value": "AMRAVATI",
+                "type": "text"
+              },
+              {
+                "key": "agencyName",
+                "value": "CWC",
+                "type": "text"
+              },
+              {
+                "key": "startdate",
+                "value": "2023-01-01",
+                "type": "text"
+              },
+              {
+                "key": "enddate",
+                "value": "2024-12-31",
+                "type": "text"
+              },
+              {
+                "key": "download",
+                "value": "false",
+                "type": "text"
+              },
+              {
+                "key": "page",
+                "value": "0",
+                "type": "text"
+              },
+              {
+                "key": "size",
+                "value": "100",
+                "type": "text"
+              }
+            ]
+          },
+          "url": {
+            "raw": "https://indiawris.gov.in/Dataset/RainFall",
+            "protocol": "https",
+            "host": [
+              "indiawris",
+              "gov",
+              "in"
+            ],
+            "path": [
+              "Dataset",
+              "RainFall"
+            ]
+          },
+          "description": "Test WRIS Rainfall API for Maharashtra Amravati district. Should return rainfall measurements from CWC stations."
+        },
+        "response": []
+      },
+      {
+        "name": "2. WRIS Groundwater API",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/x-www-form-urlencoded",
+              "type": "text"
+            },
+            {
+              "key": "Accept",
+              "value": "application/json", 
+              "type": "text"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.32.0",
+              "type": "text"
+            }
+          ],
+          "body": {
+            "mode": "urlencoded",
+            "urlencoded": [
+              {
+                "key": "stateName",
+                "value": "MAHARASHTRA",
+                "type": "text"
+              },
+              {
+                "key": "districtName",
+                "value": "AMRAVATI", 
+                "type": "text"
+              },
+              {
+                "key": "agencyName",
+                "value": "CGWB",
+                "type": "text"
+              },
+              {
+                "key": "startdate",
+                "value": "2024-01-01",
+                "type": "text"
+              },
+              {
+                "key": "enddate",
+                "value": "2024-09-29",
+                "type": "text"
+              },
+              {
+                "key": "download",
+                "value": "false",
+                "type": "text"
+              },
+              {
+                "key": "page", 
+                "value": "0",
+                "type": "text"
+              },
+              {
+                "key": "size",
+                "value": "100",
+                "type": "text"
+              }
+            ]
+          },
+          "url": {
+            "raw": "https://indiawris.gov.in/Dataset/Ground%20Water%20Level",
+            "protocol": "https",
+            "host": [
+              "indiawris",
+              "gov", 
+              "in"
+            ],
+            "path": [
+              "Dataset",
+              "Ground Water Level"
+            ]
+          },
+          "description": "Test WRIS Groundwater API for Maharashtra Amravati district. Should return data from Uttamsara CGWB station (confirmed working via terminal)."
+        },
+        "response": []
+      },
+      {
+        "name": "3. WRIS Soil Moisture API (NRSC VIC MODEL)",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/x-www-form-urlencoded",
+              "type": "text"
+            },
+            {
+              "key": "Accept",
+              "value": "application/json",
+              "type": "text"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.32.0",
+              "type": "text"
+            }
+          ],
+          "body": {
+            "mode": "urlencoded",
+            "urlencoded": [
+              {
+                "key": "stateName",
+                "value": "MAHARASHTRA",
+                "type": "text"
+              },
+              {
+                "key": "districtName",
+                "value": "AMRAVATI",
+                "type": "text"
+              },
+              {
+                "key": "agencyName",
+                "value": "NRSC VIC MODEL",
+                "type": "text"
+              },
+              {
+                "key": "startdate",
+                "value": "2024-06-01",
+                "type": "text"
+              },
+              {
+                "key": "enddate", 
+                "value": "2024-09-29",
+                "type": "text"
+              },
+              {
+                "key": "download",
+                "value": "false",
+                "type": "text"
+              },
+              {
+                "key": "page",
+                "value": "0",
+                "type": "text"
+              },
+              {
+                "key": "size",
+                "value": "100",
+                "type": "text"
+              }
+            ]
+          },
+          "url": {
+            "raw": "https://indiawris.gov.in/Dataset/Soil%20Moisture",
+            "protocol": "https",
+            "host": [
+              "indiawris",
+              "gov",
+              "in"
+            ],
+            "path": [
+              "Dataset", 
+              "Soil Moisture"
+            ]
+          },
+          "description": "Test WRIS Soil Moisture API with NRSC VIC MODEL agency for Maharashtra Amravati district."
+        },
+        "response": []
+      },
+      {
+        "name": "4. WRIS Soil Moisture API (NRSC Only)",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/x-www-form-urlencoded",
+              "type": "text"
+            },
+            {
+              "key": "Accept",
+              "value": "application/json",
+              "type": "text"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.32.0",
+              "type": "text"
+            }
+          ],
+          "body": {
+            "mode": "urlencoded",
+            "urlencoded": [
+              {
+                "key": "stateName",
+                "value": "MAHARASHTRA",
+                "type": "text"
+              },
+              {
+                "key": "districtName",
+                "value": "AMRAVATI",
+                "type": "text"
+              },
+              {
+                "key": "agencyName",
+                "value": "NRSC",
+                "type": "text"
+              },
+              {
+                "key": "startdate",
+                "value": "2024-06-01",
+                "type": "text"
+              },
+              {
+                "key": "enddate",
+                "value": "2024-09-29", 
+                "type": "text"
+              },
+              {
+                "key": "download",
+                "value": "false",
+                "type": "text"
+              },
+              {
+                "key": "page",
+                "value": "0",
+                "type": "text"
+              },
+              {
+                "key": "size", 
+                "value": "100",
+                "type": "text"
+              }
+            ]
+          },
+          "url": {
+            "raw": "https://indiawris.gov.in/Dataset/Soil%20Moisture", 
+            "protocol": "https",
+            "host": [
+              "indiawris",
+              "gov",
+              "in"
+            ],
+            "path": [
+              "Dataset",
+              "Soil Moisture"
+            ]
+          },
+          "description": "Alternative test for WRIS Soil Moisture API using just 'NRSC' as agency name (fallback if NRSC VIC MODEL fails)."
+        },
+        "response": []
+      },
+      {
+        "name": "5. WRIS Soil Moisture API (ISRO)",
+        "request": {
+          "method": "POST",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/x-www-form-urlencoded",
+              "type": "text"
+            },
+            {
+              "key": "Accept",
+              "value": "application/json",
+              "type": "text"
+            },
+            {
+              "key": "User-Agent",
+              "value": "PostmanRuntime/7.32.0",
+              "type": "text"
+            }
+          ],
+          "body": {
+            "mode": "urlencoded",
+            "urlencoded": [
+              {
+                "key": "stateName",
+                "value": "MAHARASHTRA",
+                "type": "text"
+              },
+              {
+                "key": "districtName",
+                "value": "AMRAVATI",
+                "type": "text"
+              },
+              {
+                "key": "agencyName",
+                "value": "ISRO",
+                "type": "text"
+              },
+              {
+                "key": "startdate",
+                "value": "2024-06-01",
+                "type": "text"
+              },
+              {
+                "key": "enddate",
+                "value": "2024-09-29",
+                "type": "text"
+              },
+              {
+                "key": "download",
+                "value": "false",
+                "type": "text"
+              },
+              {
+                "key": "page",
+                "value": "0",
+                "type": "text"
+              },
+              {
+                "key": "size",
+                "value": "100",
+                "type": "text"
+              }
+            ]
+          },
+          "url": {
+            "raw": "https://indiawris.gov.in/Dataset/Soil%20Moisture",
+            "protocol": "https",
+            "host": [
+              "indiawris",
+              "gov",
+              "in"  
+            ],
+            "path": [
+              "Dataset",
+              "Soil Moisture"
+            ]
+          },
+          "description": "Third alternative test for WRIS Soil Moisture API using 'ISRO' as agency name."
+        },
+        "response": []
+      }
+    ],
+    "event": [
+      {
+        "listen": "prerequest",
+        "script": {
+          "type": "text/javascript",
+          "exec": [
+            ""
+          ]
+        }
+      },
+      {
+        "listen": "test",
+        "script": {
+          "type": "text/javascript", 
+          "exec": [
+            ""
+          ]
+        }
+      }
+    ]
+  }
+  
