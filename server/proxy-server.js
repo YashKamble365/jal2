@@ -304,7 +304,6 @@ app.use((req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-const HOST = process.env.HOST || 3000;
 
 app.listen(PORT, HOST, () => {
   console.log('🚀 WRIS Proxy Server Started!');
