@@ -1,4 +1,4 @@
-// server/proxy-server.js - Updated WRIS API Server with Direct API Try Then Proxy Fallback
+// server/proxy-server.js - Updated WRIS API Server with Retry and Timeout Fix
 
 const express = require('express');
 const cors = require('cors');
@@ -11,12 +11,12 @@ const app = express();
 // Enhanced CORS configuration
 app.use(cors({
   origin: [
-    'http://localhost:3000',    // Create React App default
-    'http://localhost:5173',    // Vite default
-    'http://localhost:4173',    // Vite preview
-    process.env.FRONTEND_URL,   // Production URL from .env
-    'https://jal2.vercel.app',  // Your deployed app
-    'https://*.vercel.app'       // Any Vercel deployment
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:4173',
+    process.env.FRONTEND_URL,
+    'https://jal2.vercel.app',
+    'https://*.vercel.app'
   ].filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -27,7 +27,6 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Enhanced request logging middleware
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
   const startTime = Date.now();
@@ -39,7 +38,6 @@ app.use((req, res, next) => {
     console.log(`📍 Request: ${stateName || 'N/A'}/${districtName || 'N/A'} | ${startdate || 'N/A'} to ${enddate || 'N/A'}`);
   }
 
-  // Response time logging
   res.on('finish', () => {
     const duration = Date.now() - startTime;
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
@@ -48,27 +46,28 @@ app.use((req, res, next) => {
   next();
 });
 
-// Helper function to send HTTPS POST to WRIS API and get response as JSON
-function sendWRISRequest(endpoint, params, timeout) {
+async function proxyWRIS(endpoint, params, retries = 2) {
+  const timeoutMs = parseInt(process.env.WRIS_TIMEOUT || '60000');
+
+  const postData = querystring.stringify(params);
+
+  const options = {
+    hostname: 'indiawris.gov.in',
+    port: 443,
+    path: endpoint,
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Accept': 'application/json',
+      'Content-Length': Buffer.byteLength(postData),
+      'User-Agent': 'Mozilla/5.0 (compatible; AquaPlan/1.0)',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    },
+    timeout: timeoutMs
+  };
+
   return new Promise((resolve, reject) => {
-    const postData = querystring.stringify(params);
-
-    const options = {
-      hostname: 'indiawris.gov.in',
-      port: 443,
-      path: endpoint,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'application/json',
-        'Content-Length': Buffer.byteLength(postData),
-        'User-Agent': 'Mozilla/5.0 (compatible; AquaPlan/1.0)',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
-      },
-      timeout: timeout
-    };
-
     const req = https.request(options, (res) => {
       let data = '';
       res.setEncoding('utf8');
@@ -78,22 +77,47 @@ function sendWRISRequest(endpoint, params, timeout) {
       });
 
       res.on('end', () => {
+        if (res.statusCode !== 200) {
+          const errMsg = `WRIS API responded with status ${res.statusCode}`;
+          console.error(errMsg);
+          reject(new Error(errMsg));
+          return;
+        }
         try {
           const jsonData = JSON.parse(data);
           resolve(jsonData);
         } catch (err) {
-          reject(new Error(`Invalid JSON response from WRIS: ${err.message}`));
+          console.error('WRIS JSON parse error:', err.message);
+          console.error('Raw WRIS response:', data.substring(0, 500));
+          reject(new Error(`Invalid JSON response: ${err.message}`));
         }
       });
     });
 
-    req.on('error', (err) => {
-      reject(new Error(`WRIS connection failed: ${err.message}`));
+    req.on('error', (error) => {
+      console.error('WRIS request error:', error.message);
+      if (retries > 0) {
+        console.warn(`Retrying WRIS request, attempts left: ${retries}`);
+        setTimeout(() => {
+          proxyWRIS(endpoint, params, retries - 1).then(resolve).catch(reject);
+        }, 1000);
+      } else {
+        reject(error);
+      }
     });
 
     req.on('timeout', () => {
       req.destroy();
-      reject(new Error('WRIS request timeout - server took too long to respond'));
+      const err = new Error('WRIS request timeout - server took too long to respond');
+      console.error(err.message);
+      if (retries > 0) {
+        console.warn(`Retrying WRIS request after timeout, attempts left: ${retries}`);
+        setTimeout(() => {
+          proxyWRIS(endpoint, params, retries - 1).then(resolve).catch(reject);
+        }, 1000);
+      } else {
+        reject(err);
+      }
     });
 
     req.write(postData);
@@ -101,29 +125,6 @@ function sendWRISRequest(endpoint, params, timeout) {
   });
 }
 
-// Enhanced WRIS proxy function with retry and fallback logic
-async function proxyWRIS(endpoint, params, retries = 2) {
-  const timeoutMs = parseInt(process.env.WRIS_TIMEOUT || '60000'); // Increased timeout to 60 seconds
-
-  try {
-    // Try to call WRIS API directly first (simulate direct API call if needed)
-    // Here you can add code for direct API call logic if available
-    // For now proceed to proxy call direct
-
-    return await sendWRISRequest(endpoint, params, timeoutMs);
-  } catch (err) {
-    console.warn(`Direct WRIS API call failed: ${err.message}`);
-    if (retries > 0) {
-      console.log(`Retrying WRIS API call via proxy fallback... Attempts left: ${retries}`);
-
-      // Retry the same call recursively, decremented retries count
-      return proxyWRIS(endpoint, params, retries - 1);
-    }
-    throw err; // Re-throw if all retries fail
-  }
-}
-
-// Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
@@ -141,7 +142,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Unified fetch function used by dedicated routes and unified endpoint
 async function fetchWRISData(type, stateName, districtName, startdate, enddate) {
   const endpointConfigs = {
     rainfall: {
@@ -167,9 +167,7 @@ async function fetchWRISData(type, stateName, districtName, startdate, enddate) 
     }
   };
 
-  if (!endpointConfigs[type]) {
-    throw new Error(`Invalid data type: ${type}`);
-  }
+  if (!endpointConfigs[type]) throw new Error(`Invalid data type: ${type}`);
 
   const config = endpointConfigs[type];
 
@@ -184,8 +182,6 @@ async function fetchWRISData(type, stateName, districtName, startdate, enddate) 
     size: config.size
   });
 }
-
-// Dedicated endpoints use unified fetch function
 
 app.post('/api/wris/rainfall', async (req, res) => {
   const { stateName, districtName, startdate, enddate } = req.body;
