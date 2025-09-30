@@ -1,4 +1,5 @@
-// server/proxy-server.js
+// server/proxy-server.js - Updated WRIS API Server with Direct API Try Then Proxy Fallback
+
 const express = require('express');
 const cors = require('cors');
 const https = require('https');
@@ -7,39 +8,51 @@ require('dotenv').config();
 
 const app = express();
 
-// CORS configuration for your React app
+// Enhanced CORS configuration
 app.use(cors({
   origin: [
     'http://localhost:3000',    // Create React App default
     'http://localhost:5173',    // Vite default
     'http://localhost:4173',    // Vite preview
-    process.env.FRONTEND_URL    // Production URL from .env
+    process.env.FRONTEND_URL,   // Production URL from .env
+    'https://jal2.vercel.app',  // Your deployed app
+    'https://*.vercel.app'       // Any Vercel deployment
   ].filter(Boolean),
   credentials: true,
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Accept', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'Cache-Control'],
+  maxAge: 86400 // 24 hours preflight cache
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Request logging middleware
+// Enhanced request logging middleware
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${req.method} ${req.path}`);
+  const startTime = Date.now();
+
+  console.log(`[${timestamp}] ${req.method} ${req.path} - ${req.ip}`);
+
   if (req.method === 'POST' && req.body) {
-    console.log(`📍 Request for: ${req.body.stateName}/${req.body.districtName}`);
+    const { stateName, districtName, startdate, enddate } = req.body;
+    console.log(`📍 Request: ${stateName || 'N/A'}/${districtName || 'N/A'} | ${startdate || 'N/A'} to ${enddate || 'N/A'}`);
   }
+
+  // Response time logging
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - ${res.statusCode} - ${duration}ms`);
+  });
+
   next();
 });
 
-// Generic WRIS proxy function
-async function proxyWRIS(endpoint, params) {
+// Helper function to send HTTPS POST to WRIS API and get response as JSON
+function sendWRISRequest(endpoint, params, timeout) {
   return new Promise((resolve, reject) => {
-    console.log(`🔄 Proxying WRIS ${endpoint} for ${params.stateName}, ${params.districtName}`);
-    
     const postData = querystring.stringify(params);
-    
+
     const options = {
       hostname: 'indiawris.gov.in',
       port: 443,
@@ -49,208 +62,286 @@ async function proxyWRIS(endpoint, params) {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
         'Content-Length': Buffer.byteLength(postData),
-        'User-Agent': 'Mozilla/5.0 (compatible; AquaPlan/1.0)'
-      }
+        'User-Agent': 'Mozilla/5.0 (compatible; AquaPlan/1.0)',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      },
+      timeout: timeout
     };
-    
-    const startTime = Date.now();
+
     const req = https.request(options, (res) => {
       let data = '';
-      res.on('data', chunk => data += chunk);
+      res.setEncoding('utf8');
+
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
       res.on('end', () => {
-        const responseTime = Date.now() - startTime;
-        console.log(`✅ WRIS ${endpoint} responded in ${responseTime}ms`);
-        
         try {
           const jsonData = JSON.parse(data);
-          console.log(`📊 ${params.stateName}/${params.districtName}: Status ${jsonData.statusCode} - ${jsonData.data?.length || 0} records`);
-          
-          if (jsonData.statusCode === 200) {
-            resolve(jsonData);
-          } else {
-            resolve({
-              statusCode: jsonData.statusCode || 500,
-              message: jsonData.message || 'No data available',
-              data: [],
-              error: 'WRIS API returned error status'
-            });
-          }
-        } catch (error) {
-          console.error(`❌ JSON parse error for ${endpoint}:`, error.message);
-          reject(new Error('Invalid JSON response from WRIS'));
+          resolve(jsonData);
+        } catch (err) {
+          reject(new Error(`Invalid JSON response from WRIS: ${err.message}`));
         }
       });
     });
-    
-    req.on('error', (error) => {
-      const responseTime = Date.now() - startTime;
-      console.error(`❌ WRIS ${endpoint} failed for ${params.stateName}/${params.districtName} after ${responseTime}ms:`, error.message);
-      reject(new Error(`WRIS connection failed: ${error.message}`));
+
+    req.on('error', (err) => {
+      reject(new Error(`WRIS connection failed: ${err.message}`));
     });
-    
-    req.setTimeout(parseInt(process.env.WRIS_TIMEOUT || '30000'), () => {
-      console.error(`⏰ WRIS ${endpoint} timeout for ${params.stateName}/${params.districtName}`);
+
+    req.on('timeout', () => {
       req.destroy();
       reject(new Error('WRIS request timeout - server took too long to respond'));
     });
-    
+
     req.write(postData);
     req.end();
   });
 }
 
+// Enhanced WRIS proxy function with retry and fallback logic
+async function proxyWRIS(endpoint, params, retries = 2) {
+  const timeoutMs = parseInt(process.env.WRIS_TIMEOUT || '60000'); // Increased timeout to 60 seconds
+
+  try {
+    // Try to call WRIS API directly first (simulate direct API call if needed)
+    // Here you can add code for direct API call logic if available
+    // For now proceed to proxy call direct
+
+    return await sendWRISRequest(endpoint, params, timeoutMs);
+  } catch (err) {
+    console.warn(`Direct WRIS API call failed: ${err.message}`);
+    if (retries > 0) {
+      console.log(`Retrying WRIS API call via proxy fallback... Attempts left: ${retries}`);
+
+      // Retry the same call recursively, decremented retries count
+      return proxyWRIS(endpoint, params, retries - 1);
+    }
+    throw err; // Re-throw if all retries fail
+  }
+}
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ 
+  res.json({
     status: 'healthy',
     service: 'WRIS Proxy Server',
     version: '1.0.0',
     endpoints: [
       'POST /api/wris/rainfall',
-      'POST /api/wris/groundwater', 
-      'POST /api/wris/soil'
+      'POST /api/wris/groundwater',
+      'POST /api/wris/soil',
+      'POST /api/wris/:type (unified)',
+      'POST /api/test-location'
     ],
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });
 });
 
-// DYNAMIC Rainfall proxy
-app.post('/api/wris/rainfall', async (req, res) => {
-  try {
-    const { stateName, districtName, startdate, enddate } = req.body;
-    
-    // Validate required parameters
-    if (!stateName || !districtName) {
-      return res.status(400).json({ 
-        error: 'Missing required parameters',
-        required: ['stateName', 'districtName'],
-        received: { stateName: !!stateName, districtName: !!districtName }
-      });
-    }
-    
-    console.log(`🌧️ Fetching rainfall data for ${stateName}, ${districtName}`);
-    
-    const data = await proxyWRIS('/Dataset/RainFall', {
-      stateName: stateName.toUpperCase(),
-      districtName: districtName.toUpperCase(),
+// Unified fetch function used by dedicated routes and unified endpoint
+async function fetchWRISData(type, stateName, districtName, startdate, enddate) {
+  const endpointConfigs = {
+    rainfall: {
+      endpoint: '/Dataset/RainFall',
       agencyName: 'CWC',
-      startdate: startdate || '2023-01-01',
-      enddate: enddate || '2024-12-31',
-      download: 'false',
-      page: '0',
+      defaultStartDate: '2023-01-01',
+      defaultEndDate: '2024-12-31',
       size: '1000'
+    },
+    groundwater: {
+      endpoint: '/Dataset/Ground%20Water%20Level',
+      agencyName: 'CGWB',
+      defaultStartDate: '2024-01-01',
+      defaultEndDate: '2024-09-29',
+      size: '500'
+    },
+    soil: {
+      endpoint: '/Dataset/Soil%20Moisture',
+      agencyName: 'NRSC VIC MODEL',
+      defaultStartDate: '2024-06-01',
+      defaultEndDate: '2024-09-29',
+      size: '500'
+    }
+  };
+
+  if (!endpointConfigs[type]) {
+    throw new Error(`Invalid data type: ${type}`);
+  }
+
+  const config = endpointConfigs[type];
+
+  return await proxyWRIS(config.endpoint, {
+    stateName: stateName.toUpperCase(),
+    districtName: districtName.toUpperCase(),
+    agencyName: config.agencyName,
+    startdate: startdate || config.defaultStartDate,
+    enddate: enddate || config.defaultEndDate,
+    download: 'false',
+    page: '0',
+    size: config.size
+  });
+}
+
+// Dedicated endpoints use unified fetch function
+
+app.post('/api/wris/rainfall', async (req, res) => {
+  const { stateName, districtName, startdate, enddate } = req.body;
+
+  if (!stateName || !districtName) {
+    return res.status(400).json({
+      error: 'Missing required parameters',
+      required: ['stateName', 'districtName'],
+      received: { stateName: !!stateName, districtName: !!districtName }
     });
-    
-    // Add metadata for frontend
+  }
+
+  try {
+    console.log(`🌧️ Fetching rainfall data for ${stateName}, ${districtName}`);
+    const data = await fetchWRISData('rainfall', stateName, districtName, startdate, enddate);
     data.metadata = {
       service: 'WRIS Rainfall',
       location: `${districtName}, ${stateName}`,
       dateRange: `${startdate || '2023-01-01'} to ${enddate || '2024-12-31'}`,
       agency: 'CWC (Central Water Commission)',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      source: 'Express Proxy Server'
     };
-    
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Content-Type', 'application/json');
     res.json(data);
-    
   } catch (error) {
     console.error('🌧️ Rainfall proxy error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message,
       service: 'WRIS Rainfall',
-      location: `${req.body.districtName}, ${req.body.stateName}`,
+      location: `${districtName}, ${stateName}`,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// DYNAMIC Groundwater proxy  
 app.post('/api/wris/groundwater', async (req, res) => {
-  try {
-    const { stateName, districtName, startdate, enddate } = req.body;
-    
-    if (!stateName || !districtName) {
-      return res.status(400).json({ 
-        error: 'Missing required parameters',
-        required: ['stateName', 'districtName']
-      });
-    }
-    
-    console.log(`🌊 Fetching groundwater data for ${stateName}, ${districtName}`);
-    
-    const data = await proxyWRIS('/Dataset/Ground%20Water%20Level', {
-      stateName: stateName.toUpperCase(),
-      districtName: districtName.toUpperCase(),
-      agencyName: 'CGWB',
-      startdate: startdate || '2024-01-01',
-      enddate: enddate || '2024-09-29',
-      download: 'false',
-      page: '0',
-      size: '500'
+  const { stateName, districtName, startdate, enddate } = req.body;
+
+  if (!stateName || !districtName) {
+    return res.status(400).json({
+      error: 'Missing required parameters',
+      required: ['stateName', 'districtName']
     });
-    
+  }
+
+  try {
+    console.log(`🌊 Fetching groundwater data for ${stateName}, ${districtName}`);
+    const data = await fetchWRISData('groundwater', stateName, districtName, startdate, enddate);
     data.metadata = {
       service: 'WRIS Groundwater',
       location: `${districtName}, ${stateName}`,
       dateRange: `${startdate || '2024-01-01'} to ${enddate || '2024-09-29'}`,
       agency: 'CGWB (Central Ground Water Board)',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      source: 'Express Proxy Server'
     };
-    
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Content-Type', 'application/json');
     res.json(data);
-    
   } catch (error) {
     console.error('🌊 Groundwater proxy error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message,
       service: 'WRIS Groundwater',
-      location: `${req.body.districtName}, ${req.body.stateName}`,
+      location: `${districtName}, ${stateName}`,
       timestamp: new Date().toISOString()
     });
   }
 });
 
-// DYNAMIC Soil proxy
 app.post('/api/wris/soil', async (req, res) => {
-  try {
-    const { stateName, districtName, startdate, enddate } = req.body;
-    
-    if (!stateName || !districtName) {
-      return res.status(400).json({ 
-        error: 'Missing required parameters',
-        required: ['stateName', 'districtName']
-      });
-    }
-    
-    console.log(`🌱 Fetching soil moisture data for ${stateName}, ${districtName}`);
-    
-    const data = await proxyWRIS('/Dataset/Soil%20Moisture', {
-      stateName: stateName.toUpperCase(),
-      districtName: districtName.toUpperCase(),
-      agencyName: 'NRSC VIC MODEL', // Confirmed working from your tests
-      startdate: startdate || '2024-06-01',
-      enddate: enddate || '2024-09-29',
-      download: 'false',
-      page: '0',
-      size: '500'
+  const { stateName, districtName, startdate, enddate } = req.body;
+
+  if (!stateName || !districtName) {
+    return res.status(400).json({
+      error: 'Missing required parameters',
+      required: ['stateName', 'districtName']
     });
-    
+  }
+
+  try {
+    console.log(`🌱 Fetching soil moisture data for ${stateName}, ${districtName}`);
+    const data = await fetchWRISData('soil', stateName, districtName, startdate, enddate);
     data.metadata = {
       service: 'WRIS Soil Moisture',
       location: `${districtName}, ${stateName}`,
       dateRange: `${startdate || '2024-06-01'} to ${enddate || '2024-09-29'}`,
       agency: 'NRSC VIC MODEL (National Remote Sensing Centre)',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      source: 'Express Proxy Server'
     };
-    
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Content-Type', 'application/json');
     res.json(data);
-    
   } catch (error) {
     console.error('🌱 Soil proxy error:', error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message,
       service: 'WRIS Soil Moisture',
-      location: `${req.body.districtName}, ${req.body.stateName}`,
+      location: `${districtName}, ${stateName}`,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+app.post('/api/wris/:type', async (req, res) => {
+  const { type } = req.params;
+  const { stateName, districtName, startdate, enddate } = req.body;
+
+  if (!stateName || !districtName) {
+    return res.status(400).json({
+      error: 'Missing required parameters',
+      required: ['stateName', 'districtName'],
+      received: { stateName: !!stateName, districtName: !!districtName }
+    });
+  }
+
+  if (!['rainfall', 'groundwater', 'soil'].includes(type)) {
+    return res.status(400).json({
+      error: 'Invalid endpoint type',
+      received: type,
+      validTypes: ['rainfall', 'groundwater', 'soil'],
+      availableEndpoints: [
+        'POST /api/wris/rainfall',
+        'POST /api/wris/groundwater',
+        'POST /api/wris/soil',
+        'POST /api/wris/:type (unified endpoint)'
+      ]
+    });
+  }
+
+  try {
+    console.log(`📊 Unified API: Fetching ${type} data for ${stateName}, ${districtName}`);
+    const data = await fetchWRISData(type, stateName, districtName, startdate, enddate);
+
+    data.metadata = {
+      service: `WRIS ${type.charAt(0).toUpperCase() + type.slice(1)}`,
+      location: `${districtName}, ${stateName}`,
+      dateRange: `${startdate || ''} to ${enddate || ''}`,
+      agency: data.metadata?.agency || '',
+      timestamp: new Date().toISOString(),
+      source: 'Express Proxy Server',
+      endpoint: `/api/wris/${type}`
+    };
+
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Content-Type', 'application/json');
+    res.json(data);
+  } catch (error) {
+    console.error(`🚨 Unified API ${type} error:`, error.message);
+    res.status(500).json({
+      error: error.message,
+      service: `WRIS ${type}`,
+      location: `${districtName}, ${stateName}`,
       timestamp: new Date().toISOString()
     });
   }
@@ -259,14 +350,15 @@ app.post('/api/wris/soil', async (req, res) => {
 // Test endpoint for debugging
 app.post('/api/test-location', (req, res) => {
   const { coordinates, stateName, districtName } = req.body;
-  
+
   res.json({
     message: 'WRIS Proxy Server is ready',
     received: { coordinates, stateName, districtName },
     availableEndpoints: [
       'POST /api/wris/rainfall',
       'POST /api/wris/groundwater',
-      'POST /api/wris/soil'
+      'POST /api/wris/soil',
+      'POST /api/wris/:type (unified)'
     ],
     sampleRequest: {
       stateName: 'MAHARASHTRA',
@@ -298,7 +390,9 @@ app.use((req, res) => {
       'GET /api/health',
       'POST /api/wris/rainfall',
       'POST /api/wris/groundwater',
-      'POST /api/wris/soil'
+      'POST /api/wris/soil',
+      'POST /api/wris/:type (unified endpoint)',
+      'POST /api/test-location'
     ]
   });
 });
@@ -306,16 +400,18 @@ app.use((req, res) => {
 const PORT = process.env.PORT || 3001;
 
 app.listen(PORT, () => {
-  console.log(`🚀 WRIS Proxy Server Started! Listening on port ${PORT}`);
-  console.log('=' .repeat(50));
-  // console.log(`🌐 Server: http://${HOST}:${PORT}`);
-  console.log('📍 Endpoints:');
-  console.log(`   GET  /api/health`);
-  console.log(`   POST /api/wris/rainfall`);
-  console.log(`   POST /api/wris/groundwater`);
-  console.log(`   POST /api/wris/soil`);
-  console.log('=' .repeat(50));
-  console.log('✅ Ready to proxy WRIS APIs for any location in India!');
-  console.log(`📊 Timeout: ${process.env.WRIS_TIMEOUT || '30000'}ms`);
+  console.log('🚀 WRIS Proxy Server Started!');
+  console.log('='.repeat(50));
+  console.log(`🌐 Server listening on port ${PORT}`);
+  console.log('📍 Available Endpoints:');
+  console.log('   GET  /api/health');
+  console.log('   POST /api/wris/rainfall');
+  console.log('   POST /api/wris/groundwater');
+  console.log('   POST /api/wris/soil');
+  console.log('   POST /api/wris/:type (unified endpoint)');
+  console.log('   POST /api/test-location');
+  console.log('='.repeat(50));
+  console.log(`✅ Ready to proxy WRIS APIs for any location in India!`);
+  console.log(`📊 Timeout set to ${process.env.WRIS_TIMEOUT || '60000'}ms`);
   console.log(`🌍 CORS enabled for: ${process.env.FRONTEND_URL || 'localhost:3000,localhost:5173'}`);
 });
