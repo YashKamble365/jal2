@@ -305,10 +305,10 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 3001;
 
-app.listen(PORT, HOST, () => {
-  console.log('🚀 WRIS Proxy Server Started!');
+app.listen(PORT, () => {
+  console.log(`🚀 WRIS Proxy Server Started! Listening on port ${PORT}`);
   console.log('=' .repeat(50));
-  console.log(`🌐 Server: http://${HOST}:${PORT}`);
+  // console.log(`🌐 Server: http://${HOST}:${PORT}`);
   console.log('📍 Endpoints:');
   console.log(`   GET  /api/health`);
   console.log(`   POST /api/wris/rainfall`);
